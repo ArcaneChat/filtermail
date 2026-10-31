@@ -20,6 +20,11 @@ const UNFILTERED_SENDERS: &[&str] = &[
     "contact@arcanechat.me",
     "privacy@arcanechat.me",
 ];
+const UNFILTERED_REINJECT_PORT: u16 = 10027;
+
+fn is_unfiltered_sender(addr: &str) -> bool {
+    UNFILTERED_SENDERS.iter().any(|a| addr.eq_ignore_ascii_case(a))
+}
 
 /// Handler for outgoing SMTP messages.
 pub struct OutgoingBeforeQueueHandler<S: TcpConnect> {
@@ -151,11 +156,7 @@ where
             return Ok(());
         }
 
-        // Unencrypted whitelist
-        if UNFILTERED_SENDERS
-            .iter()
-            .any(|a| from_addr.eq_ignore_ascii_case(a))
-        {
+        if is_unfiltered_sender(&from_addr) {
             log::info!("Outgoing: Allowing unencrypted mail.");
             return Ok(());
         }
@@ -189,9 +190,14 @@ where
             lmtp: false,
             connection_context: self.connection_context.clone(),
         };
+        let port = if is_unfiltered_sender(&transaction.envelope.mail_from) {
+            UNFILTERED_REINJECT_PORT
+        } else {
+            self.config.postfix_reinject_port
+        };
         crate::smtp_client::send::<S>(
             &self.config.postfix_host,
-            self.config.postfix_reinject_port,
+            port,
             &transaction.envelope,
             client_config,
             self.dns_resolver.clone(),
