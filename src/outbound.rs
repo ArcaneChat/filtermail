@@ -15,6 +15,12 @@ use hickory_resolver::TokioResolver;
 use mailparse::{MailHeaderMap, parse_mail};
 use std::sync::Arc;
 
+const UNFILTERED_SENDERS: &[&str] = &[
+    "adb@arcanechat.me",
+    "contact@arcanechat.me",
+    "privacy@arcanechat.me",
+];
+
 /// Handler for outgoing SMTP messages.
 pub struct OutgoingBeforeQueueHandler<S: TcpConnect> {
     config: Config,
@@ -142,6 +148,15 @@ where
         // Allow encrypted or securejoin messages
         if mail_encrypted || is_securejoin(&message) {
             log::info!("Outgoing: Filtering encrypted mail.");
+            return Ok(());
+        }
+
+        // Unencrypted whitelist
+        if UNFILTERED_SENDERS
+            .iter()
+            .any(|a| from_addr.eq_ignore_ascii_case(a))
+        {
+            log::info!("Outgoing: Allowing unencrypted mail.");
             return Ok(());
         }
 
